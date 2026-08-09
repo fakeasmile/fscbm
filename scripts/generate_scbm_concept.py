@@ -336,13 +336,13 @@ def main():
     args = parse_args()
     config = MLPConfig()
 
-    data_path = config.raw_data_path / args.dataset_name / f"{args.mode}.json"
+    data_path = project_root / "data" / "raw" / args.dataset_name / f"{args.mode}.json"
     adjective_path = project_root / "data" / "raw" / "adjective" / "toxic_adjectives_v2.csv"
 
     if not adjective_path.exists():
         raise FileNotFoundError(f"形容词词典不存在: {adjective_path}")
 
-    concept_dir = config.processed_path / args.dataset_name / args.model_name
+    concept_dir = project_root / "data" / "processed" / args.dataset_name / args.model_name
     concept_dir.mkdir(parents=True, exist_ok=True)
 
     output_path = concept_dir / f"concept_{args.mode}_{args.model_name}_scbm.json"
@@ -361,7 +361,7 @@ def main():
     print("=" * 60 + "\n")
 
     tokenizer, llm_model, qwen3_flag = load_vllm_model(
-        config.models_path, args.model_name, args.gpu_memory_utilization
+        project_root / "models", args.model_name, args.gpu_memory_utilization
     )
     if qwen3_flag:
         print(f"检测到 Qwen3+ 模型，已禁用思考模式")

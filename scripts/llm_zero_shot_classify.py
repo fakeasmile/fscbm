@@ -270,8 +270,8 @@ if __name__ == "__main__":
     args = parse_args()
     config = MLPConfig()
 
-    data_path = config.raw_data_path / args.dataset_name / f"{args.mode}.json"
-    output_dir = config.experiment_path / f"{args.dataset_name}_{args.model_name}_zero_shot_{args.mode}"
+    data_path = project_root / "data" / "raw" / args.dataset_name / f"{args.mode}.json"
+    output_dir = project_root / "experiments" / f"{args.dataset_name}_{args.model_name}_zero_shot_{args.mode}"
 
     print("\n" + "=" * 60)
     print("LLM Zero-Shot 分类基线 - 配置信息")
@@ -283,7 +283,7 @@ if __name__ == "__main__":
     print("=" * 60 + "\n")
 
     tokenizer, llm_model, qwen3_flag = load_vllm_model(
-        config.models_path, args.model_name, args.gpu_memory_utilization
+        project_root / "models", args.model_name, args.gpu_memory_utilization
     )
     if qwen3_flag:
         print(f"检测到 Qwen3+ 模型，已禁用思考模式")

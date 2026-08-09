@@ -394,7 +394,7 @@ def analyze_scbm_verbalizer_coverage(
 
 def main():
     config = MLPConfig()
-    output_dir = config.base_path / OUTPUT_DIR
+    output_dir = project_root / OUTPUT_DIR
 
     print("\n" + "=" * 60)
     print("SCBM Verbalizer 覆盖率分析（vLLM 版本）")
@@ -406,7 +406,7 @@ def main():
     print("=" * 60 + "\n")
 
     tokenizer, llm_model, qwen3_flag = load_vllm_model(
-        config.models_path, MODEL_NAME, GPU_MEMORY_UTILIZATION
+        project_root / "models", MODEL_NAME, GPU_MEMORY_UTILIZATION
     )
     if qwen3_flag:
         print(f"检测到 Qwen3+ 模型({MODEL_NAME})，已禁用思考模式")
@@ -417,7 +417,7 @@ def main():
 
     analyze_scbm_verbalizer_coverage(
         text_content=TEXT_CONTENT,
-        adjective_path=config.adjective_path,
+        adjective_path=project_root / "data" / "raw" / "adjective" / "toxic_adjectives_v2.csv",
         tokenizer=tokenizer,
         llm_model=llm_model,
         output_dir=output_dir,
