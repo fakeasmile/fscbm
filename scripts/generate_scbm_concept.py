@@ -208,7 +208,7 @@ def extract_binary_score(first_token_logprobs, yes_ids, no_ids):
         no_ids: "否" 的 token id 列表
 
     Returns:
-        (score, p_yes, p_no): P("是") 归一化分数 (0~1), 原始概率
+        (score, binary_probs): P("是") 归一化分数 (0~1), 二元概率列表 [P(是),P(否)]
     """
     probs_dict = {}
     for token_id, logprob_obj in first_token_logprobs.items():
@@ -220,7 +220,7 @@ def extract_binary_score(first_token_logprobs, yes_ids, no_ids):
     total = p_yes + p_no + 1e-8
     score = p_yes / total
 
-    return score, p_yes, p_no
+    return score, [p_yes, p_no]
 
 
 # =============================================================================
@@ -264,6 +264,7 @@ def generate_scbm_concept(data_path, output_path, csv_output_path, adjective_pat
 
     results = []
     concept_matrix = []
+    all_raw_probs = []  # 收集所有二元概率，用于验证 prompt 约束力
 
     for sample in tqdm(data_set, desc="Processing samples"):
         content = sample["content"]
@@ -281,21 +282,25 @@ def generate_scbm_concept(data_path, output_path, csv_output_path, adjective_pat
         outputs = llm_model.generate(prompts, sampling_params, use_tqdm=False)
 
         concept_vector = []
+        raw_probs = []
         for sample_info in outputs:
             first_token_logprobs = sample_info.outputs[0].logprobs[0]
-            score, p_yes, p_no = extract_binary_score(first_token_logprobs, yes_ids, no_ids)
+            score, binary_probs = extract_binary_score(first_token_logprobs, yes_ids, no_ids)
             concept_vector.append(score)
+            raw_probs.append(binary_probs)
 
         if len(concept_vector) != num_adjs:
             raise RuntimeError(f"concept_vector 长度异常：期望 {num_adjs}，实际 {len(concept_vector)}")
 
         truncated_vector = [s if abs(s) >= threshold else 0.0 for s in concept_vector]
         concept_matrix.append(truncated_vector)
+        all_raw_probs.append(raw_probs)
 
         result_item = {
             "content": sample["content"],
             "toxic": sample["toxic"],
             "concept": truncated_vector,
+            "level_probs": raw_probs,
         }
         results.append(result_item)
 
@@ -316,6 +321,12 @@ def generate_scbm_concept(data_path, output_path, csv_output_path, adjective_pat
     nonzero = sum(1 for row in concept_matrix for s in row if s > 0)
     coverage = nonzero / total_scores
     print(f"概念激活率: {coverage:.2%} ({nonzero}/{total_scores})")
+
+    # 验证 prompt 约束力：P(是)+P(否) 均值
+    all_p_yes = sum(p[0] for r in all_raw_probs for p in r) / total_scores
+    all_p_no = sum(p[1] for r in all_raw_probs for p in r) / total_scores
+    print(f"二元概率分布均值: P(是)={all_p_yes:.4f}, P(否)={all_p_no:.4f}, "
+          f"P(是)+P(否)={all_p_yes+all_p_no:.4f}")
 
 
 # =============================================================================
