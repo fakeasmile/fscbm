@@ -1,0 +1,794 @@
+[
+  {
+    "name": "abusive",
+    "chinese": "辱骂性的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "accommodating",
+    "chinese": "迁就的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "age discriminatory",
+    "chinese": "年龄歧视的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "anti-disabled",
+    "chinese": "反残疾人的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "anti-feminist",
+    "chinese": "反女权的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "anti-queer",
+    "chinese": "反酷儿的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "argumentative",
+    "chinese": "好争辩的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "awful",
+    "chinese": "糟糕的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "bitter",
+    "chinese": "怨恨的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "body shaming",
+    "chinese": "身体羞辱的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "bullying",
+    "chinese": "欺凌性的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "challenging",
+    "chinese": "挑战性的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "charged with aggression",
+    "chinese": "充满攻击性的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "chauvinistic",
+    "chinese": "沙文主义的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "condemning violence",
+    "chinese": "谴责暴力的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "condescending",
+    "chinese": "居高临下的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "conflictual",
+    "chinese": "冲突性的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "confrontational",
+    "chinese": "对抗性的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "considerate",
+    "chinese": "体贴的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "contemptuous",
+    "chinese": "蔑视的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "contradictory",
+    "chinese": "矛盾的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "contrasting",
+    "chinese": "对比的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "convincing",
+    "chinese": "有说服力的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "defamatory",
+    "chinese": "诽谤性的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "defensive",
+    "chinese": "防御性的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "degrading",
+    "chinese": "有辱人格的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "dehumanizing",
+    "chinese": "非人化的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "derogatory",
+    "chinese": "贬义的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "despicable",
+    "chinese": "可鄙的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "devaluing",
+    "chinese": "贬低价值的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "differentiating",
+    "chinese": "区分的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "discreditable",
+    "chinese": "有损信誉的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "disgusting",
+    "chinese": "令人厌恶的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "disrespectful",
+    "chinese": "不尊重的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "distancing",
+    "chinese": "疏远的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "distinctive",
+    "chinese": "独特的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "distracting",
+    "chinese": "分散注意力的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "diversity conscious",
+    "chinese": "关注多样性的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "exclusionary",
+    "chinese": "排他性的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "extremist",
+    "chinese": "极端主义的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "fact-based",
+    "chinese": "基于事实的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "fair",
+    "chinese": "公平的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "gender discriminatory",
+    "chinese": "性别歧视的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "glorifying violence",
+    "chinese": "美化暴力的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "harassing",
+    "chinese": "骚扰性的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "homophobic",
+    "chinese": "恐同的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "hostile to minorities",
+    "chinese": "对少数群体有敌意的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "humane",
+    "chinese": "人道的",
+    "type": "strategy",
+    "source": "heuristic"
+  },
+  {
+    "name": "hurtful",
+    "chinese": "伤人的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "inappropriate",
+    "chinese": "不适当的",
+    "type": "neutral",
+    "source": "matched"
+  },
+  {
+    "name": "inflammatory",
+    "chinese": "煽动性的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "inhuman",
+    "chinese": "非人的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "inhumane",
+    "chinese": "不人道的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "insensitive",
+    "chinese": "麻木不仁的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "insidious",
+    "chinese": "阴险的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "insulting",
+    "chinese": "侮辱性的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "integrative",
+    "chinese": "整合的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "malicious",
+    "chinese": "恶意的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "misanthropic",
+    "chinese": "厌恶人类的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "misogynistic",
+    "chinese": "厌恶女性的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "mockingly",
+    "chinese": "嘲讽地",
+    "type": "strategy",
+    "source": "heuristic"
+  },
+  {
+    "name": "moralizing",
+    "chinese": "说教的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "negative",
+    "chinese": "负面的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "obscene",
+    "chinese": "淫秽的",
+    "type": "neutral",
+    "source": "matched"
+  },
+  {
+    "name": "offending",
+    "chinese": "冒犯的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "outrageous",
+    "chinese": "令人愤慨的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "passive-aggressive",
+    "chinese": "被动攻击的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "polemical",
+    "chinese": "辩论的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "prejudiced",
+    "chinese": "有偏见的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "promoting aggression",
+    "chinese": "宣扬攻击性的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "racist",
+    "chinese": "种族主义的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "rejecting",
+    "chinese": "拒绝的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "reprehensible",
+    "chinese": "应受谴责的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "repulsive",
+    "chinese": "令人反感的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "rough",
+    "chinese": "粗鲁的",
+    "type": "neutral",
+    "source": "matched"
+  },
+  {
+    "name": "ruthless",
+    "chinese": "无情的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "sarcastic",
+    "chinese": "讽刺的",
+    "type": "neutral",
+    "source": "matched"
+  },
+  {
+    "name": "shameless",
+    "chinese": "无耻的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "sharp",
+    "chinese": "尖锐的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "stirring up conflict",
+    "chinese": "煽动冲突的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "stubborn",
+    "chinese": "固执的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "threatening",
+    "chinese": "威胁性的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "toxic",
+    "chinese": "有毒的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "transphobic",
+    "chinese": "跨性别恐惧症的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "unfair",
+    "chinese": "不公平的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "unforgivable",
+    "chinese": "不可原谅的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "unsatisfied",
+    "chinese": "不满意的",
+    "type": "evaluation",
+    "source": "heuristic"
+  },
+  {
+    "name": "vile",
+    "chinese": "卑鄙的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "vulgar",
+    "chinese": "粗俗的",
+    "type": "neutral",
+    "source": "matched"
+  },
+  {
+    "name": "region-biased",
+    "chinese": "地域偏见的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "localist",
+    "chinese": "地方保护主义的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "doxing",
+    "chinese": "人肉搜索的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "cyberbullying",
+    "chinese": "网络霸凌的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "witch-hunting",
+    "chinese": "猎巫式的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "misandrist",
+    "chinese": "厌恶男性的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "gender-hostile",
+    "chinese": "性别敌对的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "anti-marriage",
+    "chinese": "反婚反育的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "elitist",
+    "chinese": "精英主义的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "lookist",
+    "chinese": "外貌歧视的",
+    "type": "discrimination",
+    "source": "heuristic"
+  },
+  {
+    "name": "education-shaming",
+    "chinese": "学历羞辱的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "ultranationalist",
+    "chinese": "极端民族主义的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "trolling",
+    "chinese": "钓鱼引战的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "concern-trolling",
+    "chinese": "伪关心引战的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "sealioning",
+    "chinese": "纠缠式质问的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "dog-whistling",
+    "chinese": "狗哨政治的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "parent-shaming",
+    "chinese": "父母羞辱的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "rape-threatening",
+    "chinese": "强奸威胁的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "suicide-baiting",
+    "chinese": "怂恿自杀的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "what-about-ism",
+    "chinese": "比烂主义的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "straw-manning",
+    "chinese": "稻草人攻击的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "guilt-tripping",
+    "chinese": "愧疚诱导的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "anti-rural",
+    "chinese": "反农村人的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "anti-migrant",
+    "chinese": "反流动人口的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "cancel-culture",
+    "chinese": "取消文化的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "passive-snarky",
+    "chinese": "阴阳怪气的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "narrative-manipulating",
+    "chinese": "带节奏的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "label-attacking",
+    "chinese": "贴标签的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "moral-coercing",
+    "chinese": "道德绑架的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "concept-shifting",
+    "chinese": "偷换概念的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "overgeneralizing",
+    "chinese": "以偏概全的",
+    "type": "evaluation",
+    "source": "matched"
+  },
+  {
+    "name": "gender-objectifying",
+    "chinese": "物化特定性别的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "gender-stereotyping",
+    "chinese": "强化性别刻板印象的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "region-stereotyping",
+    "chinese": "强化地域刻板印象的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "culturally-superior",
+    "chinese": "文化优越的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "group-stigmatizing",
+    "chinese": "群体污名化的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "bias-rationalizing",
+    "chinese": "内部偏见合理化的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "mirror-accusing",
+    "chinese": "镜像指控的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "opposition-creating",
+    "chinese": "制造对立的",
+    "type": "discrimination",
+    "source": "matched"
+  },
+  {
+    "name": "silencing",
+    "chinese": "沉默对方的",
+    "type": "behavior",
+    "source": "matched"
+  },
+  {
+    "name": "cherry-picking",
+    "chinese": "选择性引用的",
+    "type": "strategy",
+    "source": "matched"
+  },
+  {
+    "name": "victim-posing",
+    "chinese": "受害者姿态的",
+    "type": "behavior",
+    "source": "heuristic"
+  },
+  {
+    "name": "violence-justifying",
+    "chinese": "正当化暴力的",
+    "type": "strategy",
+    "source": "matched"
+  }
+]
