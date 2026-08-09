@@ -174,15 +174,20 @@ def get_first_token_ids(word_list, tokenizer):
 # =============================================================================
 # 提示词定义（对齐 SCBM 原文 Section 3.2，与 generate_scbm_concept.py 一致）
 # =============================================================================
+SYSTEM_INSTRUCTION = (
+    "你是一位社会科学专家。当被问到问题时，请直接回答\"是\"或\"否\"，只回答一个词。"
+)
+
 def build_chat_messages(content, adj):
     """构建 SCBM 二元评估的 Chat Template messages。
 
-    对齐 SCBM 原文 Section 3.2：
-      "Tell me if the adjective [adjective] describes the content of the following text: [text]?"
-    翻译为中文，不使用 system persona，不使用形容词定义。
+    与 generate_scbm_concept.py 中的 build_chat_messages 完全一致。
     """
     user_content = f"告诉我，形容词\"{adj}\"是否描述了以下文本的内容：\"{content}\""
-    return [{"role": "user", "content": user_content}]
+    return [
+        {"role": "system", "content": SYSTEM_INSTRUCTION},
+        {"role": "user", "content": user_content},
+    ]
 
 
 def analyze_scbm_verbalizer_coverage(

@@ -4,11 +4,12 @@ SCBM（Labadie-Tamayo et al., IPM 2026）使用二元概念评估，核心方法
   1. 对每个形容词 a 和文本 t，使用简单模板构造提示词
   2. 提取 LLM 输出中"正面回应"（yes 类 token）的边际概率作为概念分数
   3. 提示词模板：Tell me if the adjective [adjective] describes the content of the following text: [text]?
-  4. 不使用 system persona（对应论文 Table C.10 中 TSNH 的配置）
+  4. 适配 GLM-4-9B-Chat 中文模型：添加 System message 约束输出格式（对齐 GermEval 的 Persona 做法）
 
 【与原始 SCBM 的主要差异】
 - 原始论文使用 GPT-4o/Llama 3.1 等英文模型，此处使用 GLM-4-9B-Chat 中文模型
-- 提示词翻译为中文（"告诉我，形容词adj是否描述了以下文本的内容：text"）
+- 提示词翻译为中文，并添加 System message 约束输出格式（对齐 GermEval 的 Persona 做法）
+- 不使用形容词定义（SCBM 原文仅在少样本 ICL 实验中引入定义）
 
 使用示例：
   python scripts/generate_scbm_concept.py --mode train --dataset_name TOXICN --model_name glm-4-9b-chat
@@ -154,15 +155,21 @@ def load_vllm_model(model_path: Path, model_name: str, gpu_memory_utilization: f
 
 
 # =============================================================================
-# 提示词定义（对齐 SCBM 原文 Section 3.2）
+# 提示词定义（对齐 SCBM 原文 Section 3.2，适配 GLM-4-9B-Chat 中文模型）
 # =============================================================================
+SYSTEM_INSTRUCTION = (
+    "你是一位社会科学专家。当被问到问题时，请直接回答\"是\"或\"否\"，只回答一个词。"
+)
+
 def build_chat_messages(content, adj, adj_definition=None):
     """构建 SCBM 二元评估的 Chat Template messages。
 
-    SCBM 使用简单的提示词模板（论文 Section 3.2）：
+    SCBM 原文（Section 3.2）使用简单模板：
       "Tell me if the adjective [adjective] describes the content of the following text: [text]?"
-    此处翻译为中文，不使用 system persona（对应论文 Table C.10 中 TSNH 的配置）。
-    不使用形容词定义（SCBM 原文仅在少样本 ICL 实验中引入定义）。
+    此处翻译为中文，并适配 GLM-4-9B-Chat：
+    - 保持 SCBM 原文的简单提问结构
+    - 添加 System message 约束输出格式（对齐 GermEval 的 Persona 做法）
+    - 不使用形容词定义（SCBM 原文仅在少样本 ICL 实验中引入定义）
 
     Args:
         content: 输入文本
@@ -172,6 +179,7 @@ def build_chat_messages(content, adj, adj_definition=None):
     user_content = f"告诉我，形容词\"{adj}\"是否描述了以下文本的内容：\"{content}\""
 
     return [
+        {"role": "system", "content": SYSTEM_INSTRUCTION},
         {"role": "user", "content": user_content},
     ]
 
@@ -227,9 +235,10 @@ def generate_scbm_concept(data_path, output_path, csv_output_path, adjective_pat
     通过 verbalizer 技术提取"是"类 token 的边际概率作为概念分数，
     构建概念向量（每条文本一个 V 维向量，V = 形容词数量）。
 
-    提示词模板（中文翻译）：
-      "告诉我，形容词"adj"是否描述了以下文本的内容："text""
-    不使用 system persona，不使用形容词定义。
+    提示词模板（对齐 SCBM 原文 Section 3.2，适配 GLM-4-9B-Chat 中文模型）：
+      System: 你是一位社会科学专家。当被问到问题时，请直接回答"是"或"否"，只回答一个词。
+      User: 告诉我，形容词"adj"是否描述了以下文本的内容："text"
+    不使用形容词定义。
     """
     # 二元 verbalizer token
     yes_tokens = ["是"]
