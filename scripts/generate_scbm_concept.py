@@ -337,7 +337,7 @@ def main():
     config = MLPConfig()
 
     data_path = config.raw_data_path / args.dataset_name / f"{args.mode}.json"
-    adjective_path = config.adjective_path
+    adjective_path = project_root / "data" / "raw" / "adjective" / "toxic_adjectives_v2.csv"
 
     if not adjective_path.exists():
         raise FileNotFoundError(f"形容词词典不存在: {adjective_path}")
