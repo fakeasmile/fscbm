@@ -14,6 +14,9 @@ class MLPConfig():
         # ========== MLP 训练超参数 ==========
         self.batch_size = 16  # 批次大小
         self.epochs = 200  # 训练轮数
+        self.label_smoothing = 0.05  # 标签平滑系数
+        self.use_ema = True  # 是否启用 EMA（指数移动平均）
+        self.ema_decay = 0.999  # EMA 衰减系数
         
         # OneCycleLR 学习率调度器参数
         self.max_lr = 1e-3  # 峰值学习率

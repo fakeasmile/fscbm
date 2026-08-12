@@ -10,11 +10,20 @@ SNR计算注记：SNR作为特征工程参数从全训练集估计，不参与�
                 此做法等价于 StandardScaler.fit(train_data)，不属于数据泄露。
 
 -- 快速上手 --
-# 搜索好种子（30个种子，每个训练一次，从 summary.json 找 best）
-python utils/train_acv_fscbm.py --dataset_name TOXICN --model_name glm-4-9b-chat --n_seeds 30
-
-# 复现最佳种子
+# 固定种子全量实验（默认基线：full 特征 + 门控 + SNR 加权）
 python utils/train_acv_fscbm.py --dataset_name TOXICN --model_name glm-4-9b-chat --seed 42
+
+-- 参数说明 --
+--dataset_name    数据集名称，如 TOXICN
+--model_name      LLM 概念向量模型名，如 glm-4-9b-chat
+--seed            固定随机种子（不指定时随机生成）
+--n_seeds         搜索的种子数量（>1 时批量训练，从 summary.json 找最优）
+--feat_mode       特征通道组合，用于消融：full=[P3;P2;差值]（默认）；
+                  p3_p2=[P3;P2]（去掉差值）；p3_diff=[P3;加权差值]（去掉P2，强制SNR加权）
+--no_gate         去掉门控层（消融，特征保持 3 通道）
+--no_snr          差值不使用 SNR 加权（消融，仅对 full 模式生效）
+
+注：label_smoothing / use_ema / ema_decay 为训练超参数，在 configs/MLP_config.py 中配置。
 """
 
 import argparse
@@ -64,13 +73,18 @@ def worker_init_fn(worker_id):
 # =============================================================================
 # 等级特征向量构造（对应论文 2.3 节）
 # =============================================================================
-def extract_level_features(data, concept_types, snr_weights):
+def extract_level_features(data, concept_types, snr_weights, feat_mode="full", use_snr=True):
     """构造等级特征向量 x = [p^{(3)}; p^{(2)}; d̃] ∈ R^{3l}。
 
     Args:
         data: 概念向量数据集（每个元素含 level_probs 和 toxic 标签）
         concept_types: 概念类型列表（保留参数，当前未使用）
         snr_weights: SNR 权重向量 w_j = max(SNR_j, 0) + 0.01
+        feat_mode: 特征通道组合方式，用于消融实验
+            - "full"   : [p^{(3)}; p^{(2)}; 差值] ∈ R^{3l}（默认）
+            - "p3_p2"  : [p^{(3)}; p^{(2)}] ∈ R^{2l}（消融：去掉差值通道）
+            - "p3_diff": [p^{(3)}; 加权差值] ∈ R^{2l}（消融：去掉 p^{(2)} 通道）
+        use_snr: 是否对差值做 SNR 加权（消融：去掉 SNR 加权）
 
     Returns:
         (X, y): 等级特征矩阵和标签张量
@@ -84,9 +98,16 @@ def extract_level_features(data, concept_types, snr_weights):
         for ci in range(n_concepts):
             p3_arr[si, ci] = lp[ci][2]; p2_arr[si, ci] = lp[ci][1]
         y[si] = item["toxic"]
-    snr_w = np.clip(snr_weights, 0, None) + 0.01
-    weighted_contrast = (p3_arr - p2_arr) * snr_w
-    X = np.concatenate([p3_arr, p2_arr, weighted_contrast], axis=1)
+    diff = p3_arr - p2_arr
+    if use_snr:
+        snr_w = np.clip(snr_weights, 0, None) + 0.01
+        diff = diff * snr_w
+    if feat_mode == "p3_p2":
+        X = np.concatenate([p3_arr, p2_arr], axis=1)
+    elif feat_mode == "p3_diff":
+        X = np.concatenate([p3_arr, diff], axis=1)
+    else:  # full
+        X = np.concatenate([p3_arr, p2_arr, diff], axis=1)
     return torch.tensor(X, dtype=torch.float32), torch.tensor(y, dtype=torch.long)
 
 
@@ -119,7 +140,7 @@ def compute_concept_snr(train_data, n_concepts):
 # =============================================================================
 def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
                    config, n_concepts, n_summary, n_main_channels,
-                   label_smoothing, use_ema, ema_decay, seed):
+                   label_smoothing, use_ema, ema_decay, seed, use_gate=True):
     set_seed(seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     tr_X, va_X, tr_y, va_y, _, _ = train_test_split(
@@ -134,7 +155,7 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
 
     model = GatedConceptClassifier(
         n_concepts, concept_types, config.dropout_rate, config.hidden_features,
-        n_summary, n_main_channels).to(device)
+        n_summary, n_main_channels, use_gate).to(device)
     criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
     opt = optim.AdamW(model.parameters(), lr=config.max_lr / config.div_factor)
     steps = len(train_loader) * config.epochs
@@ -208,12 +229,13 @@ def plot_metrics(out_dir, hist_v, hist_t):
     plt.tight_layout(); plt.savefig(out_dir / 'metrics.png'); plt.close()
 
 
-def save_seed_result(out_dir, r, seed, args, n_concepts, n_features, use_ema):
+def save_seed_result(out_dir, r, seed, config, args, n_concepts, n_features):
     out_dir.mkdir(parents=True, exist_ok=True)
     cfg = {"pipeline": "acv_fscbm", "feature_mode": "level_features",
            "seed": seed, "n_concepts": n_concepts, "n_features": n_features,
-           "label_smoothing": args.label_smoothing,
-           "use_ema": use_ema, "ema_decay": args.ema_decay if use_ema else None,
+           "label_smoothing": config.label_smoothing,
+           "use_ema": config.use_ema, "ema_decay": config.ema_decay if config.use_ema else None,
+           "feat_mode": args.feat_mode, "use_gate": args.use_gate, "use_snr": args.use_snr,
            "val_f1": round(r['val_f1'], 4), "test_f1": round(r['test_f1'], 4)}
     with open(out_dir / "config.json", "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
@@ -232,16 +254,26 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--dataset_name', required=True)
     p.add_argument('--model_name', required=True)
-    p.add_argument('--label_smoothing', type=float, default=0.05)
-    p.add_argument('--no_ema', action='store_true')
-    p.add_argument('--ema_decay', type=float, default=0.999)
     p.add_argument('--seed', type=int, default=None)
     p.add_argument('--n_seeds', type=int, default=1)
+    # ===== 消融实验参数（控制变量法，每次只改变一个变量）=====
+    p.add_argument('--feat_mode', choices=['full', 'p3_p2', 'p3_diff'], default='full',
+                   help="特征通道组合：full=[P3;P2;差值]；p3_p2=[P3;P2]（消融：去掉差值）；"
+                        "p3_diff=[P3;加权差值]（消融：去掉P2）")
+    p.add_argument('--no_gate', action='store_true',
+                   help="消融：去掉门控层（特征保持 3 通道）")
+    p.add_argument('--no_snr', action='store_true',
+                   help="消融：差值不使用 SNR 加权（仅对 full 模式生效）")
     args = p.parse_args()
 
     config = MLPConfig(); config.dataset_name = args.dataset_name
     config.model_name = args.model_name
-    use_ema = not args.no_ema
+    use_ema = config.use_ema
+    args.use_gate = not args.no_gate
+    # p3_diff 需要 SNR 加权，强制开启
+    args.use_snr = not args.no_snr if args.feat_mode == 'full' else True
+    # 主特征通道数：full=3，p3_p2/p3_diff=2
+    n_channels = {'full': 3, 'p3_p2': 2, 'p3_diff': 2}[args.feat_mode]
 
     base = config.processed_path / args.dataset_name / args.model_name
     with open(base / f"concept_train_{args.model_name}_v2_3level.json", encoding="utf-8") as f:
@@ -253,11 +285,13 @@ def main():
     with open(config.raw_data_path / "adjective" / "toxic_adjectives_v2_types.json", encoding="utf-8") as f:
         concept_types = [i["type"] for i in json.load(f)]
     snr = compute_concept_snr(train_data, n_concepts)
-    nc, ns = 3, 0  # ns=0: 不使用类型级聚合特征，特征维度降至 396
-    tr_X, tr_y = extract_level_features(train_data, concept_types, snr)
-    te_X, te_y = extract_level_features(test_data, concept_types, snr)
+    nc, ns = n_channels, 0  # ns=0: 不使用类型级聚合特征
+    tr_X, tr_y = extract_level_features(train_data, concept_types, snr, args.feat_mode, args.use_snr)
+    te_X, te_y = extract_level_features(test_data, concept_types, snr, args.feat_mode, args.use_snr)
     n_feat = tr_X.shape[1]
-    print(f">>> 特征: {n_feat}d LS={args.label_smoothing} EMA={'on' if use_ema else 'off'}")
+    print(f">>> 特征: {n_feat}d ({args.feat_mode}) SNR={'on' if args.use_snr else 'off'} "
+          f"Gate={'on' if args.use_gate else 'off'} LS={config.label_smoothing} "
+          f"EMA={'on' if use_ema else 'off'}")
 
     if args.n_seeds == 1:
         seeds = [args.seed if args.seed is not None else random.randint(0, 9999)]
@@ -266,16 +300,23 @@ def main():
                 else [random.randint(0, 9999) for _ in range(args.n_seeds)]
 
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    parent = config.experiment_path / ts
+    # 输出目录按消融配置加后缀，避免相互覆盖
+    tags = []
+    if args.feat_mode != 'full': tags.append(args.feat_mode)
+    if not args.use_gate: tags.append('nogate')
+    if not args.use_snr: tags.append('nosnr')
+    suffix = '_' + '+'.join(tags) if tags else ''
+    parent = config.experiment_path / f"{ts}{suffix}"
     print(f">>> {len(seeds)} seeds → {parent.name}")
 
     all_r = []
     for si, seed in enumerate(seeds):
         r = train_one_seed(tr_X, tr_y, te_X, te_y, concept_types,
                            config, n_concepts, ns, nc,
-                           args.label_smoothing, use_ema, args.ema_decay, seed)
+                           config.label_smoothing, use_ema, config.ema_decay, seed,
+                           args.use_gate)
         all_r.append({'seed': seed, **r})
-        save_seed_result(parent / f"seed_{seed}", r, seed, args, n_concepts, n_feat, use_ema)
+        save_seed_result(parent / f"seed_{seed}", r, seed, config, args, n_concepts, n_feat)
         print(f"  seed={seed}: val={r['val_f1']:.4f} test={r['test_f1']:.4f} ep={r['best_epoch']}")
 
     all_r.sort(key=lambda x: x['test_f1'], reverse=True)
@@ -290,8 +331,9 @@ def main():
     print(f">>> 复现: --seed {best['seed']}")
 
     summary = {"timestamp": ts, "n_seeds": len(seeds),
-               "feature_mode": "level_features", "label_smoothing": args.label_smoothing,
+               "feature_mode": "level_features", "label_smoothing": config.label_smoothing,
                "use_ema": use_ema, "n_concepts": n_concepts, "n_features": n_feat,
+               "feat_mode": args.feat_mode, "use_gate": args.use_gate, "use_snr": args.use_snr,
                "results": [{"seed": r['seed'], "test_f1": round(r['test_f1'], 4),
                             "val_f1": round(r['val_f1'], 4)} for r in all_r]}
     with open(parent / "summary.json", "w", encoding="utf-8") as f:

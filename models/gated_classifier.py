@@ -22,12 +22,15 @@ class GatedConceptClassifier(nn.Module):
         hidden_features: 隐藏层维度 d_h
         n_summary: 类型级汇总特征维度（保留参数，当前为 0）
         n_main_channels: 主特征通道数（默认 3 路：P3+P2+加权差值）
+        use_gate: 是否启用矩阵门控（消融实验：去掉门控层时置 False）
     """
     def __init__(self, n_concepts, concept_types, dropout_rate=0.5,
-                 hidden_features=96, n_summary=0, n_main_channels=3):
+                 hidden_features=96, n_summary=0, n_main_channels=3, use_gate=True):
         super().__init__()
         self.main_dim = n_concepts * n_main_channels
-        self.gate_layer = nn.Linear(self.main_dim, self.main_dim)
+        self.use_gate = use_gate
+        if use_gate:
+            self.gate_layer = nn.Linear(self.main_dim, self.main_dim)
         self.dropout = nn.Dropout(dropout_rate)
         self.fc1 = nn.Linear(self.main_dim + n_summary, hidden_features)
         self.fc2 = nn.Linear(hidden_features, 2)
@@ -35,6 +38,7 @@ class GatedConceptClassifier(nn.Module):
 
     def forward(self, x):
         main, summary = x[:, :self.main_dim], x[:, self.main_dim:]
-        gated = main * torch.sigmoid(self.gate_layer(main))
-        h = self.relu(self.fc1(self.dropout(torch.cat([gated, summary], dim=1))))
+        if self.use_gate:
+            main = main * torch.sigmoid(self.gate_layer(main))
+        h = self.relu(self.fc1(self.dropout(torch.cat([main, summary], dim=1))))
         return self.fc2(self.dropout(h))

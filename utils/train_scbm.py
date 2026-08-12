@@ -9,11 +9,16 @@
 训练策略：label_smoothing=0.05 + EMA(decay=0.999) + AdamW + OneCycleLR
 
 -- 快速上手 --
-# 搜索好种子
-python utils/train_scbm.py --dataset_name TOXICN --model_name glm-4-9b-chat --n_seeds 30
-
-# 复现最佳种子
+# 固定种子全量实验
 python utils/train_scbm.py --dataset_name TOXICN --model_name glm-4-9b-chat --seed 42
+
+-- 参数说明 --
+--dataset_name    数据集名称，如 TOXICN
+--model_name      LLM 概念向量模型名，如 glm-4-9b-chat
+--seed            固定随机种子（不指定时随机生成）
+--n_seeds         搜索的种子数量（>1 时批量训练，从 summary.json 找最优）
+
+注：label_smoothing / use_ema / ema_decay 为训练超参数，在 configs/MLP_config.py 中配置。
 """
 
 import argparse
@@ -178,12 +183,12 @@ def plot_metrics(out_dir, hist_v, hist_t):
     plt.tight_layout(); plt.savefig(out_dir / 'metrics.png'); plt.close()
 
 
-def save_seed_result(out_dir, r, seed, args, n_concepts, n_features, use_ema):
+def save_seed_result(out_dir, r, seed, config, args, n_concepts, n_features):
     out_dir.mkdir(parents=True, exist_ok=True)
     cfg = {"pipeline": "scbm", "feature_mode": "binary",
            "seed": seed, "n_concepts": n_concepts, "n_features": n_features,
-           "label_smoothing": args.label_smoothing,
-           "use_ema": use_ema, "ema_decay": args.ema_decay if use_ema else None,
+           "label_smoothing": config.label_smoothing,
+           "use_ema": config.use_ema, "ema_decay": config.ema_decay if config.use_ema else None,
            "val_f1": round(r['val_f1'], 4), "test_f1": round(r['test_f1'], 4)}
     with open(out_dir / "config.json", "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
@@ -202,16 +207,13 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--dataset_name', required=True)
     p.add_argument('--model_name', required=True)
-    p.add_argument('--label_smoothing', type=float, default=0.05)
-    p.add_argument('--no_ema', action='store_true')
-    p.add_argument('--ema_decay', type=float, default=0.999)
     p.add_argument('--seed', type=int, default=None)
     p.add_argument('--n_seeds', type=int, default=1)
     args = p.parse_args()
 
     config = MLPConfig(); config.dataset_name = args.dataset_name
     config.model_name = args.model_name
-    use_ema = not args.no_ema
+    use_ema = config.use_ema
 
     base = config.processed_path / args.dataset_name / args.model_name
     with open(base / f"concept_train_{args.model_name}_scbm.json", encoding="utf-8") as f:
@@ -227,7 +229,7 @@ def main():
     tr_X, tr_y = extract_scbm_features(train_data)
     te_X, te_y = extract_scbm_features(test_data)
     n_feat = tr_X.shape[1]
-    print(f">>> SCBM 特征: {n_feat}d LS={args.label_smoothing} EMA={'on' if use_ema else 'off'}")
+    print(f">>> SCBM 特征: {n_feat}d LS={config.label_smoothing} EMA={'on' if use_ema else 'off'}")
 
     if args.n_seeds == 1:
         seeds = [args.seed if args.seed is not None else random.randint(0, 9999)]
@@ -243,9 +245,9 @@ def main():
     for si, seed in enumerate(seeds):
         r = train_one_seed(tr_X, tr_y, te_X, te_y, concept_types,
                            config, n_concepts, 0, 1,  # ns=0, nc=1
-                           args.label_smoothing, use_ema, args.ema_decay, seed)
+                           config.label_smoothing, use_ema, config.ema_decay, seed)
         all_r.append({'seed': seed, **r})
-        save_seed_result(parent / f"seed_{seed}", r, seed, args, n_concepts, n_feat, use_ema)
+        save_seed_result(parent / f"seed_{seed}", r, seed, config, args, n_concepts, n_feat)
         print(f"  seed={seed}: val={r['val_f1']:.4f} test={r['test_f1']:.4f} ep={r['best_epoch']}")
 
     all_r.sort(key=lambda x: x['test_f1'], reverse=True)
@@ -260,7 +262,7 @@ def main():
     print(f">>> 复现: --seed {best['seed']}")
 
     summary = {"timestamp": ts, "n_seeds": len(seeds),
-               "feature_mode": "scbm_binary", "label_smoothing": args.label_smoothing,
+               "feature_mode": "scbm_binary", "label_smoothing": config.label_smoothing,
                "use_ema": use_ema, "n_concepts": n_concepts, "n_features": n_feat,
                "results": [{"seed": r['seed'], "test_f1": round(r['test_f1'], 4),
                             "val_f1": round(r['val_f1'], 4)} for r in all_r]}
