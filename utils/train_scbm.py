@@ -131,13 +131,13 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
             for bx, by in val_loader:
                 vp.extend(torch.argmax(ev(bx.to(device)), 1).cpu().numpy())
                 vl.extend(by.numpy())
-        vf = f1_score(vl, vp, average='macro')
+        vf = f1_score(vl, vp, average='weighted')
         tp, tl = [], []
         with torch.no_grad():
             for bx, by in test_loader:
                 tp.extend(torch.argmax(ev(bx.to(device)), 1).cpu().numpy())
                 tl.extend(by.numpy())
-        tf_ = f1_score(tl, tp, average='macro')
+        tf_ = f1_score(tl, tp, average='weighted')
         hist_v.append(vf); hist_t.append(tf_)
         pbar.set_postfix({'val': f'{vf:.4f}', 'test': f'{tf_:.4f}', 'best': f'{best_val:.4f}'})
         if vf > best_val:
@@ -155,7 +155,7 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
         for bx, by in test_loader:
             ap.extend(torch.argmax(model(bx.to(device)), 1).cpu().numpy())
             al.extend(by.numpy())
-    tf = f1_score(al, ap, average='macro')
+    tf = f1_score(al, ap, average='weighted')
     tp = precision_score(al, ap, average='macro', zero_division=0)
     tr = recall_score(al, ap, average='macro', zero_division=0)
     nr = recall_score(al, ap, labels=[0], average=None)[0]
@@ -173,7 +173,7 @@ def plot_metrics(out_dir, hist_v, hist_t):
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(hist_v, label='Val F1', color='tab:blue')
     ax.plot(hist_t, label='Test F1 (obs)', color='tab:red', linestyle='--')
-    ax.set_xlabel('Epoch'); ax.set_ylabel('Macro F1')
+    ax.set_xlabel('Epoch'); ax.set_ylabel('Weighted F1')
     ax.legend(); ax.grid(True, linestyle='--', alpha=0.6)
     plt.tight_layout(); plt.savefig(out_dir / 'metrics.png'); plt.close()
 
