@@ -61,47 +61,11 @@ def parse_args():
 # 模型加载配置表（复用 generate_concept_vectors.py 中的配置）
 # =============================================================================
 MODEL_LOADING_CONFIG = {
-    "Qwen2.5-7B-Instruct": {
-        "quantization": None,
-        "is_qwen3": False,
-        "is_multimodal": False,
-        "prompt_suffix": "",
-    },
-    "Qwen2.5-14B-Instruct": {
-        "quantization": None,
-        "is_qwen3": False,
-        "is_multimodal": False,
-        "prompt_suffix": "",
-    },
-    "Qwen3.5-9B": {
-        "quantization": "fp8",
-        "is_qwen3": True,
-        "is_multimodal": True,
-        "prompt_suffix": "",
-    },
     "glm-4-9b-chat": {
         "quantization": None,
         "is_qwen3": False,
         "is_multimodal": False,
         "prompt_suffix": "\n",
-    },
-    "deepseek-llm-7b-chat": {
-        "quantization": None,
-        "is_qwen3": False,
-        "is_multimodal": False,
-        "prompt_suffix": "",
-    },
-    "Baichuan2-7B-Chat": {
-        "quantization": None,
-        "is_qwen3": False,
-        "is_multimodal": False,
-        "prompt_suffix": "",
-    },
-    "Qwen3-8B": {
-        "quantization": None,
-        "is_qwen3": True,
-        "is_multimodal": False,
-        "prompt_suffix": "",
     },
 }
 

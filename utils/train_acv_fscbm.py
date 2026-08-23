@@ -11,22 +11,20 @@ SNR计算注记：SNR作为特征工程参数从全训练集估计，不参与�
 
 -- 快速上手 --
 # 固定种子全量实验（默认基线：full 特征 + 门控 + SNR 加权）
-python utils/train_acv_fscbm.py --dataset_name TOXICN --model_name glm-4-9b-chat --seed 42
+python utils/train_acv_fscbm.py --dataset_name TOXICN --model_name glm-4-9b-chat --seed 729
 
 -- 参数说明 --
 --dataset_name    数据集名称，如 TOXICN
 --model_name      LLM 概念向量模型名，如 glm-4-9b-chat
---seed            固定随机种子（不指定时随机生成）
---n_seeds         搜索的种子数量（>1 时批量训练，从 summary.json 找最优）
---feat_mode       特征通道组合，用于消融：full=[P3;P2;差值]（默认）；
-                  p3_p2=[P3;P2]（去掉差值）；p3_diff=[P3;加权差值]（去掉P2，强制SNR加权）
+--seed            固定随机种子（不填则随机生成，单次运行）
 --no_gate         去掉门控层（消融，特征保持 3 通道）
---no_snr          差值不使用 SNR 加权（消融，仅对 full 模式生效）
+--no_snr          差值不使用 SNR 加权（消融）
 
 注：label_smoothing / use_ema / ema_decay 为训练超参数，在 configs/MLP_config.py 中配置。
 """
 
 import argparse
+import csv
 import json
 import os
 import random
@@ -166,22 +164,31 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
     ema = AveragedModel(model, multi_avg_fn=get_ema_multi_avg_fn(ema_decay)) if use_ema else None
 
     best_val, best_sd, best_ep, no_imp = 0.0, None, 0, 0
-    hist_v, hist_t = [], []
+    hist_v, hist_t, hist_loss, hist_vloss, hist_pt, hist_rt, hist_acc = [], [], [], [], [], [], []
     pbar = tqdm(range(config.epochs), desc=f"Seed {seed}")
     for ep in pbar:
         model.train()
+        ep_loss, ep_correct, ep_total, n_batches = 0.0, 0, 0, 0
         for bx, by in train_loader:
             bx, by = bx.to(device), by.to(device)
-            opt.zero_grad(); loss = criterion(model(bx), by)
+            opt.zero_grad(); out = model(bx)
+            loss = criterion(out, by)
             loss.backward(); opt.step(); sch.step()
             if ema is not None: ema.update_parameters(model)
+            ep_loss += loss.item(); n_batches += 1
+            ep_correct += (torch.argmax(out, 1) == by).sum().item()
+            ep_total += by.size(0)
         ev = ema if ema is not None else model
         ev.eval()
         vp, vl = [], []
+        vloss, n_vbatches = 0.0, 0
         with torch.no_grad():
             for bx, by in val_loader:
-                vp.extend(torch.argmax(ev(bx.to(device)), 1).cpu().numpy())
-                vl.extend(by.numpy())
+                bx, by = bx.to(device), by.to(device)
+                out = ev(bx)
+                vp.extend(torch.argmax(out, 1).cpu().numpy())
+                vl.extend(by.cpu().numpy())
+                vloss += criterion(out, by).item(); n_vbatches += 1
         vf = f1_score(vl, vp, average='weighted')
         tp, tl = [], []
         with torch.no_grad():
@@ -189,7 +196,13 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
                 tp.extend(torch.argmax(ev(bx.to(device)), 1).cpu().numpy())
                 tl.extend(by.numpy())
         tf_ = f1_score(tl, tp, average='weighted')
+        tp_ = precision_score(tl, tp, average='weighted', zero_division=0)
+        tr_ = recall_score(tl, tp, average='weighted', zero_division=0)
         hist_v.append(vf); hist_t.append(tf_)
+        hist_loss.append(ep_loss / n_batches)
+        hist_vloss.append(vloss / n_vbatches)
+        hist_pt.append(tp_); hist_rt.append(tr_)
+        hist_acc.append(ep_correct / ep_total)
         pbar.set_postfix({'val': f'{vf:.4f}', 'test': f'{tf_:.4f}', 'best': f'{best_val:.4f}'})
         if vf > best_val:
             best_val = vf; best_ep = ep + 1; no_imp = 0
@@ -214,7 +227,9 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
     cr = classification_report(al, ap, target_names=["Non-Toxic", "Toxic"])
     return {'val_f1': best_val, 'test_f1': tf, 'precision': tp, 'recall': tr,
             'nt_recall': nr, 'tx_recall': xr, 'best_epoch': best_ep,
-            'report': cr, 'hist_v': hist_v, 'hist_t': hist_t, 'state_dict': best_sd}
+            'report': cr, 'hist_v': hist_v, 'hist_t': hist_t, 'state_dict': best_sd,
+            'hist_loss': hist_loss, 'hist_vloss': hist_vloss,
+            'hist_prec': hist_pt, 'hist_rec': hist_rt, 'hist_acc': hist_acc}
 
 
 # =============================================================================
@@ -229,18 +244,52 @@ def plot_metrics(out_dir, hist_v, hist_t):
     plt.tight_layout(); plt.savefig(out_dir / 'metrics.png'); plt.close()
 
 
-def save_seed_result(out_dir, r, seed, config, args, n_concepts, n_features):
+def plot_training_curves(out_dir, r):
+    """固定种子运行时绘制两张训练过程图：
+    1. loss.png   —— 训练集损失下降曲线（训练损失 + 验证损失）
+    2. metrics.png —— 训练集准确率变化曲线
+    """
+    eps = np.arange(1, len(r['hist_loss']) + 1)
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(eps, r['hist_loss'], label='训练损失', color='tab:red', linestyle='-')
+    ax.plot(eps, r['hist_vloss'], label='验证损失', color='tab:blue', linestyle='--')
+    ax.set_xlabel('训练批次'); ax.set_ylabel('损失值')
+    ax.legend(); ax.grid(True, linestyle='--', alpha=0.6)
+    plt.tight_layout(); plt.savefig(out_dir / 'loss.png'); plt.close()
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(eps, r['hist_acc'], label='训练集准确率', color='tab:blue', linestyle='-')
+    ax.set_xlabel('训练批次'); ax.set_ylabel('准确率')
+    ax.legend(); ax.grid(True, linestyle='--', alpha=0.6)
+    plt.tight_layout(); plt.savefig(out_dir / 'metrics.png'); plt.close()
+
+
+def save_seed_result(out_dir, r, seed, config, args, n_concepts, n_features, detailed=False):
     out_dir.mkdir(parents=True, exist_ok=True)
     cfg = {"pipeline": "acv_fscbm", "feature_mode": "level_features",
            "seed": seed, "n_concepts": n_concepts, "n_features": n_features,
            "label_smoothing": config.label_smoothing,
            "use_ema": config.use_ema, "ema_decay": config.ema_decay if config.use_ema else None,
-           "feat_mode": args.feat_mode, "use_gate": args.use_gate, "use_snr": args.use_snr,
+           "feat_mode": "full", "use_gate": args.use_gate, "use_snr": args.use_snr,
            "val_f1": round(r['val_f1'], 4), "test_f1": round(r['test_f1'], 4)}
     with open(out_dir / "config.json", "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
     torch.save(r['state_dict'], out_dir / "best_model.pth")
-    plot_metrics(out_dir, r['hist_v'], r['hist_t'])
+    if detailed:
+        plot_training_curves(out_dir, r)  # loss.png + metrics.png（P/R/加权F1）
+    else:
+        plot_metrics(out_dir, r['hist_v'], r['hist_t'])
+    # 训练过程曲线数据（可直接查看的 CSV），供后续与 SCBM 对比绘图使用
+    with open(out_dir / "train_curves.csv", "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["pipeline", "acv_fscbm"])
+        w.writerow(["dataset", args.dataset_name])
+        w.writerow(["model", args.model_name])
+        w.writerow(["seed", seed])
+        w.writerow(["epochs", len(r['hist_loss'])])
+        w.writerow(["epoch", "train_loss", "train_acc"])
+        for i, (l, a) in enumerate(zip(r['hist_loss'], r['hist_acc']), 1):
+            w.writerow([i, f"{l:.6f}", f"{a:.6f}"])
     trd = out_dir / "test_results"; trd.mkdir(exist_ok=True)
     with open(trd / "report.txt", "w", encoding="utf-8") as f:
         f.write(f"Seed={seed} Val={r['val_f1']:.4f} Test={r['test_f1']:.4f}\n")
@@ -254,26 +303,22 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--dataset_name', required=True)
     p.add_argument('--model_name', required=True)
-    p.add_argument('--seed', type=int, default=None)
-    p.add_argument('--n_seeds', type=int, default=1)
+    p.add_argument('--seed', type=int, default=None,
+                   help="固定随机种子（不填则随机生成，单次运行）")
     # ===== 消融实验参数（控制变量法，每次只改变一个变量）=====
-    p.add_argument('--feat_mode', choices=['full', 'p3_p2', 'p3_diff'], default='full',
-                   help="特征通道组合：full=[P3;P2;差值]；p3_p2=[P3;P2]（消融：去掉差值）；"
-                        "p3_diff=[P3;加权差值]（消融：去掉P2）")
     p.add_argument('--no_gate', action='store_true',
                    help="消融：去掉门控层（特征保持 3 通道）")
     p.add_argument('--no_snr', action='store_true',
-                   help="消融：差值不使用 SNR 加权（仅对 full 模式生效）")
+                   help="消融：差值不使用 SNR 加权")
     args = p.parse_args()
 
     config = MLPConfig(); config.dataset_name = args.dataset_name
     config.model_name = args.model_name
     use_ema = config.use_ema
     args.use_gate = not args.no_gate
-    # p3_diff 需要 SNR 加权，强制开启
-    args.use_snr = not args.no_snr if args.feat_mode == 'full' else True
-    # 主特征通道数：full=3，p3_p2/p3_diff=2
-    n_channels = {'full': 3, 'p3_p2': 2, 'p3_diff': 2}[args.feat_mode]
+    args.use_snr = not args.no_snr
+    # 完整模型：3 通道等级特征（P3 + P2 + 加权差值）
+    nc, ns = 3, 0  # ns=0: 不使用类型级聚合特征
 
     base = config.processed_path / args.dataset_name / args.model_name
     with open(base / f"concept_train_{args.model_name}_v2_3level.json", encoding="utf-8") as f:
@@ -285,60 +330,37 @@ def main():
     with open(config.raw_data_path / "adjective" / "toxic_adjectives_v2_types.json", encoding="utf-8") as f:
         concept_types = [i["type"] for i in json.load(f)]
     snr = compute_concept_snr(train_data, n_concepts)
-    nc, ns = n_channels, 0  # ns=0: 不使用类型级聚合特征
-    tr_X, tr_y = extract_level_features(train_data, concept_types, snr, args.feat_mode, args.use_snr)
-    te_X, te_y = extract_level_features(test_data, concept_types, snr, args.feat_mode, args.use_snr)
+    tr_X, tr_y = extract_level_features(train_data, concept_types, snr, "full", args.use_snr)
+    te_X, te_y = extract_level_features(test_data, concept_types, snr, "full", args.use_snr)
     n_feat = tr_X.shape[1]
-    print(f">>> 特征: {n_feat}d ({args.feat_mode}) SNR={'on' if args.use_snr else 'off'} "
+    print(f">>> 特征: {n_feat}d (full) SNR={'on' if args.use_snr else 'off'} "
           f"Gate={'on' if args.use_gate else 'off'} LS={config.label_smoothing} "
           f"EMA={'on' if use_ema else 'off'}")
 
-    if args.n_seeds == 1:
-        seeds = [args.seed if args.seed is not None else random.randint(0, 9999)]
-    else:
-        seeds = [args.seed + i for i in range(args.n_seeds)] if args.seed is not None \
-                else [random.randint(0, 9999) for _ in range(args.n_seeds)]
-
+    seed = args.seed if args.seed is not None else random.randint(0, 9999)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    # 输出目录按消融配置加后缀，避免相互覆盖
+    # run_id：时间戳_方法[_消融]_s种子（扁平化，不再建 seed_* 子目录）
     tags = []
-    if args.feat_mode != 'full': tags.append(args.feat_mode)
     if not args.use_gate: tags.append('nogate')
     if not args.use_snr: tags.append('nosnr')
-    suffix = '_' + '+'.join(tags) if tags else ''
-    parent = config.experiment_path / f"{ts}{suffix}"
-    print(f">>> {len(seeds)} seeds → {parent.name}")
+    tag = '_' + '+'.join(tags) if tags else ''
+    parent = config.experiment_path / f"{ts}_acv{tag}_s{seed}"
+    print(f">>> seed={seed} → {parent.name}")
 
-    all_r = []
-    for si, seed in enumerate(seeds):
-        r = train_one_seed(tr_X, tr_y, te_X, te_y, concept_types,
-                           config, n_concepts, ns, nc,
-                           config.label_smoothing, use_ema, config.ema_decay, seed,
-                           args.use_gate)
-        all_r.append({'seed': seed, **r})
-        save_seed_result(parent / f"seed_{seed}", r, seed, config, args, n_concepts, n_feat)
-        print(f"  seed={seed}: val={r['val_f1']:.4f} test={r['test_f1']:.4f} ep={r['best_epoch']}")
+    # 固定种子运行：绘制详细训练过程图（loss.png + 训练集准确率 metrics.png）
+    r = train_one_seed(tr_X, tr_y, te_X, te_y, concept_types,
+                       config, n_concepts, ns, nc,
+                       config.label_smoothing, use_ema, config.ema_decay, seed,
+                       args.use_gate)
+    save_seed_result(parent, r, seed, config, args, n_concepts, n_feat,
+                     detailed=True)
+    print(f"  seed={seed}: val={r['val_f1']:.4f} test={r['test_f1']:.4f} ep={r['best_epoch']}")
 
-    all_r.sort(key=lambda x: x['test_f1'], reverse=True)
     print(f"\n{'='*50}")
     print(f"  {'Seed':<8}{'Val':<10}{'Test':<10}{'NT':<10}{'TX':<10}")
     print(f"  {'-'*46}")
-    for r in all_r[:20]:
-        print(f"  {r['seed']:<8}{r['val_f1']:<10.4f}{r['test_f1']:<10.4f}"
-              f"{r['nt_recall']:<10.4f}{r['tx_recall']:<10.4f}")
-    best = all_r[0]
-    print(f"\n>>> 最佳 seed={best['seed']} F1={best['test_f1']:.4f}")
-    print(f">>> 复现: --seed {best['seed']}")
-
-    summary = {"timestamp": ts, "n_seeds": len(seeds),
-               "feature_mode": "level_features", "label_smoothing": config.label_smoothing,
-               "use_ema": use_ema, "n_concepts": n_concepts, "n_features": n_feat,
-               "feat_mode": args.feat_mode, "use_gate": args.use_gate, "use_snr": args.use_snr,
-               "results": [{"seed": r['seed'], "test_f1": round(r['test_f1'], 4),
-                            "val_f1": round(r['val_f1'], 4)} for r in all_r]}
-    with open(parent / "summary.json", "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
-    print(f">>> {parent / 'summary.json'}")
+    print(f"  {seed:<8}{r['val_f1']:<10.4f}{r['test_f1']:<10.4f}"
+          f"{r['nt_recall']:<10.4f}{r['tx_recall']:<10.4f}")
 
 
 if __name__ == "__main__":
