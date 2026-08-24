@@ -15,13 +15,13 @@ python utils/train_scbm.py --dataset_name TOXICN --model_name glm-4-9b-chat --se
 -- 参数说明 --
 --dataset_name    数据集名称，如 TOXICN
 --model_name      LLM 概念向量模型名，如 glm-4-9b-chat
---seed            固定随机种子（不指定时随机生成）
---n_seeds         搜索的种子数量（>1 时批量训练，从 summary.json 找最优）
+--seed            固定随机种子（不填则随机生成，单次运行）
 
 注：label_smoothing / use_ema / ema_decay 为训练超参数，在 configs/MLP_config.py 中配置。
 """
 
 import argparse
+import csv
 import json
 import os
 import random
@@ -120,15 +120,20 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
     ema = AveragedModel(model, multi_avg_fn=get_ema_multi_avg_fn(ema_decay)) if use_ema else None
 
     best_val, best_sd, best_ep, no_imp = 0.0, None, 0, 0
-    hist_v, hist_t = [], []
+    hist_v, hist_t, hist_loss, hist_acc = [], [], [], []
     pbar = tqdm(range(config.epochs), desc=f"Seed {seed}")
     for ep in pbar:
         model.train()
+        ep_loss, ep_correct, ep_total, n_batches = 0.0, 0, 0, 0
         for bx, by in train_loader:
             bx, by = bx.to(device), by.to(device)
-            opt.zero_grad(); loss = criterion(model(bx), by)
+            opt.zero_grad(); out = model(bx)
+            loss = criterion(out, by)
             loss.backward(); opt.step(); sch.step()
             if ema is not None: ema.update_parameters(model)
+            ep_loss += loss.item(); n_batches += 1
+            ep_correct += (torch.argmax(out, 1) == by).sum().item()
+            ep_total += by.size(0)
         ev = ema if ema is not None else model
         ev.eval()
         vp, vl = [], []
@@ -144,6 +149,8 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
                 tl.extend(by.numpy())
         tf_ = f1_score(tl, tp, average='weighted')
         hist_v.append(vf); hist_t.append(tf_)
+        hist_loss.append(ep_loss / n_batches)
+        hist_acc.append(ep_correct / ep_total)
         pbar.set_postfix({'val': f'{vf:.4f}', 'test': f'{tf_:.4f}', 'best': f'{best_val:.4f}'})
         if vf > best_val:
             best_val = vf; best_ep = ep + 1; no_imp = 0
@@ -168,7 +175,8 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
     cr = classification_report(al, ap, target_names=["Non-Toxic", "Toxic"])
     return {'val_f1': best_val, 'test_f1': tf, 'precision': tp, 'recall': tr,
             'nt_recall': nr, 'tx_recall': xr, 'best_epoch': best_ep,
-            'report': cr, 'hist_v': hist_v, 'hist_t': hist_t, 'state_dict': best_sd}
+            'report': cr, 'hist_v': hist_v, 'hist_t': hist_t, 'state_dict': best_sd,
+            'hist_loss': hist_loss, 'hist_acc': hist_acc}
 
 
 # =============================================================================
@@ -194,6 +202,17 @@ def save_seed_result(out_dir, r, seed, config, args, n_concepts, n_features):
         json.dump(cfg, f, indent=2, ensure_ascii=False)
     torch.save(r['state_dict'], out_dir / "best_model.pth")
     plot_metrics(out_dir, r['hist_v'], r['hist_t'])
+    # 训练过程曲线数据（可直接查看的 CSV），供后续与 ACV-FSCBM 对比绘图使用
+    with open(out_dir / "train_curves.csv", "w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["pipeline", "scbm"])
+        w.writerow(["dataset", args.dataset_name])
+        w.writerow(["model", args.model_name])
+        w.writerow(["seed", seed])
+        w.writerow(["epochs", len(r['hist_loss'])])
+        w.writerow(["epoch", "train_loss", "train_acc"])
+        for i, (l, a) in enumerate(zip(r['hist_loss'], r['hist_acc']), 1):
+            w.writerow([i, f"{l:.6f}", f"{a:.6f}"])
     trd = out_dir / "test_results"; trd.mkdir(exist_ok=True)
     with open(trd / "report.txt", "w", encoding="utf-8") as f:
         f.write(f"Seed={seed} Val={r['val_f1']:.4f} Test={r['test_f1']:.4f}\n")
@@ -207,8 +226,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--dataset_name', required=True)
     p.add_argument('--model_name', required=True)
-    p.add_argument('--seed', type=int, default=None)
-    p.add_argument('--n_seeds', type=int, default=1)
+    p.add_argument('--seed', type=int, default=None,
+                   help="固定随机种子（不填则随机生成，单次运行）")
     args = p.parse_args()
 
     config = MLPConfig(); config.dataset_name = args.dataset_name
@@ -231,44 +250,23 @@ def main():
     n_feat = tr_X.shape[1]
     print(f">>> SCBM 特征: {n_feat}d LS={config.label_smoothing} EMA={'on' if use_ema else 'off'}")
 
-    if args.n_seeds == 1:
-        seeds = [args.seed if args.seed is not None else random.randint(0, 9999)]
-    else:
-        seeds = [args.seed + i for i in range(args.n_seeds)] if args.seed is not None \
-                else [random.randint(0, 9999) for _ in range(args.n_seeds)]
-
+    seed = args.seed if args.seed is not None else random.randint(0, 9999)
     ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    parent = config.experiment_path / f"{ts}_scbm"
-    print(f">>> {len(seeds)} seeds → {parent.name}")
+    # run_id：时间戳_方法_s种子（扁平化，不再建 seed_* 子目录）
+    parent = config.experiment_path / f"{ts}_scbm_s{seed}"
+    print(f">>> seed={seed} → {parent.name}")
 
-    all_r = []
-    for si, seed in enumerate(seeds):
-        r = train_one_seed(tr_X, tr_y, te_X, te_y, concept_types,
-                           config, n_concepts, 0, 1,  # ns=0, nc=1
-                           config.label_smoothing, use_ema, config.ema_decay, seed)
-        all_r.append({'seed': seed, **r})
-        save_seed_result(parent / f"seed_{seed}", r, seed, config, args, n_concepts, n_feat)
-        print(f"  seed={seed}: val={r['val_f1']:.4f} test={r['test_f1']:.4f} ep={r['best_epoch']}")
+    r = train_one_seed(tr_X, tr_y, te_X, te_y, concept_types,
+                       config, n_concepts, 0, 1,  # ns=0, nc=1
+                       config.label_smoothing, use_ema, config.ema_decay, seed)
+    save_seed_result(parent, r, seed, config, args, n_concepts, n_feat)
+    print(f"  seed={seed}: val={r['val_f1']:.4f} test={r['test_f1']:.4f} ep={r['best_epoch']}")
 
-    all_r.sort(key=lambda x: x['test_f1'], reverse=True)
     print(f"\n{'='*50}")
     print(f"  {'Seed':<8}{'Val':<10}{'Test':<10}{'NT':<10}{'TX':<10}")
     print(f"  {'-'*46}")
-    for r in all_r[:20]:
-        print(f"  {r['seed']:<8}{r['val_f1']:<10.4f}{r['test_f1']:<10.4f}"
-              f"{r['nt_recall']:<10.4f}{r['tx_recall']:<10.4f}")
-    best = all_r[0]
-    print(f"\n>>> 最佳 seed={best['seed']} F1={best['test_f1']:.4f}")
-    print(f">>> 复现: --seed {best['seed']}")
-
-    summary = {"timestamp": ts, "n_seeds": len(seeds),
-               "feature_mode": "scbm_binary", "label_smoothing": config.label_smoothing,
-               "use_ema": use_ema, "n_concepts": n_concepts, "n_features": n_feat,
-               "results": [{"seed": r['seed'], "test_f1": round(r['test_f1'], 4),
-                            "val_f1": round(r['val_f1'], 4)} for r in all_r]}
-    with open(parent / "summary.json", "w", encoding="utf-8") as f:
-        json.dump(summary, f, indent=2, ensure_ascii=False)
-    print(f">>> {parent / 'summary.json'}")
+    print(f"  {seed:<8}{r['val_f1']:<10.4f}{r['test_f1']:<10.4f}"
+          f"{r['nt_recall']:<10.4f}{r['tx_recall']:<10.4f}")
 
 
 if __name__ == "__main__":
