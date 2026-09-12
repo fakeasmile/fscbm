@@ -11,11 +11,14 @@
 -- 快速上手 --
 # 固定种子全量实验
 python utils/train_scbm.py --dataset_name TOXICN --model_name glm-4-9b-chat --seed 42
+# 多轮实验（每轮一个随机种子，共 3 轮）
+python utils/train_scbm.py --dataset_name COLD --model_name glm-4-9b-chat --rounds 3
 
 -- 参数说明 --
 --dataset_name    数据集名称，如 TOXICN
 --model_name      LLM 概念向量模型名，如 glm-4-9b-chat
---seed            固定随机种子（不填则随机生成，单次运行）
+--seed            固定随机种子（不填则随机生成；rounds=1 时作为随机种子，rounds>1 时作为首轮种子）
+--rounds          运行轮数，每轮使用一个随机种子（默认 1，即单次运行）
 
 注：label_smoothing / use_ema / ema_decay 为训练超参数，在 configs/MLP_config.py 中配置。
 """
@@ -37,7 +40,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.optim.swa_utils import AveragedModel, get_ema_multi_avg_fn
 from torch.utils.data import DataLoader, TensorDataset
-from sklearn.metrics import classification_report, f1_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, classification_report, f1_score, precision_score, recall_score
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
@@ -170,10 +173,16 @@ def train_one_seed(train_X, train_y, test_X, test_y, concept_types,
     tf = f1_score(al, ap, average='weighted')
     tp = precision_score(al, ap, average='macro', zero_division=0)
     tr = recall_score(al, ap, average='macro', zero_division=0)
+    ta = accuracy_score(al, ap)
+    mf = f1_score(al, ap, average='macro')
+    wp = precision_score(al, ap, average='weighted', zero_division=0)
+    wr = recall_score(al, ap, average='weighted', zero_division=0)
     nr = recall_score(al, ap, labels=[0], average=None)[0]
     xr = recall_score(al, ap, labels=[1], average=None)[0]
     cr = classification_report(al, ap, target_names=["Non-Toxic", "Toxic"])
-    return {'val_f1': best_val, 'test_f1': tf, 'precision': tp, 'recall': tr,
+    return {'val_f1': best_val, 'test_f1': tf, 'test_acc': ta, 'macro_f1': mf,
+            'precision': tp, 'recall': tr,
+            'weighted_precision': wp, 'weighted_recall': wr,
             'nt_recall': nr, 'tx_recall': xr, 'best_epoch': best_ep,
             'report': cr, 'hist_v': hist_v, 'hist_t': hist_t, 'state_dict': best_sd,
             'hist_loss': hist_loss, 'hist_acc': hist_acc}
@@ -194,10 +203,15 @@ def plot_metrics(out_dir, hist_v, hist_t):
 def save_seed_result(out_dir, r, seed, config, args, n_concepts, n_features):
     out_dir.mkdir(parents=True, exist_ok=True)
     cfg = {"pipeline": "scbm", "feature_mode": "binary",
+           "dataset": args.dataset_name, "model": args.model_name,
            "seed": seed, "n_concepts": n_concepts, "n_features": n_features,
            "label_smoothing": config.label_smoothing,
            "use_ema": config.use_ema, "ema_decay": config.ema_decay if config.use_ema else None,
-           "val_f1": round(r['val_f1'], 4), "test_f1": round(r['test_f1'], 4)}
+           "val_f1": round(r['val_f1'], 4), "test_f1": round(r['test_f1'], 4),
+           "test_acc": round(r['test_acc'], 4), "macro_f1": round(r['macro_f1'], 4),
+           "precision": round(r['precision'], 4), "recall": round(r['recall'], 4),
+           "weighted_precision": round(r['weighted_precision'], 4),
+           "weighted_recall": round(r['weighted_recall'], 4)}
     with open(out_dir / "config.json", "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
     torch.save(r['state_dict'], out_dir / "best_model.pth")
@@ -215,7 +229,8 @@ def save_seed_result(out_dir, r, seed, config, args, n_concepts, n_features):
             w.writerow([i, f"{l:.6f}", f"{a:.6f}"])
     trd = out_dir / "test_results"; trd.mkdir(exist_ok=True)
     with open(trd / "report.txt", "w", encoding="utf-8") as f:
-        f.write(f"Seed={seed} Val={r['val_f1']:.4f} Test={r['test_f1']:.4f}\n")
+        f.write(f"Seed={seed} Val={r['val_f1']:.4f} Test={r['test_f1']:.4f} "
+                f"Acc={r['test_acc']:.4f} MacroF1={r['macro_f1']:.4f}\n")
         f.write("-" * 40 + "\n" + r['report'])
 
 
@@ -227,7 +242,9 @@ def main():
     p.add_argument('--dataset_name', required=True)
     p.add_argument('--model_name', required=True)
     p.add_argument('--seed', type=int, default=None,
-                   help="固定随机种子（不填则随机生成，单次运行）")
+                   help="固定随机种子（不填则随机生成；rounds=1 时作为随机种子，rounds>1 时作为首轮种子）")
+    p.add_argument('--rounds', type=int, default=1,
+                   help="运行轮数，每轮使用一个随机种子（默认 1，即单次运行）")
     args = p.parse_args()
 
     config = MLPConfig(); config.dataset_name = args.dataset_name
@@ -250,23 +267,35 @@ def main():
     n_feat = tr_X.shape[1]
     print(f">>> SCBM 特征: {n_feat}d LS={config.label_smoothing} EMA={'on' if use_ema else 'off'}")
 
-    seed = args.seed if args.seed is not None else random.randint(0, 9999)
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    # run_id：时间戳_方法_s种子（扁平化，不再建 seed_* 子目录）
-    parent = config.experiment_path / f"{ts}_scbm_s{seed}"
-    print(f">>> seed={seed} → {parent.name}")
+    # 生成种子列表：rounds 轮，每轮一个随机种子（与 ACV-FSCBM 命名一致）
+    rounds = max(args.rounds, 1)
+    seeds = []
+    if args.seed is not None:
+        seeds.append(args.seed)  # 用户指定种子作为首轮种子
+    while len(seeds) < rounds:
+        seeds.append(random.randint(0, 9999))
+    seeds = seeds[:rounds]
 
-    r = train_one_seed(tr_X, tr_y, te_X, te_y, concept_types,
-                       config, n_concepts, 0, 1,  # ns=0, nc=1
-                       config.label_smoothing, use_ema, config.ema_decay, seed)
-    save_seed_result(parent, r, seed, config, args, n_concepts, n_feat)
-    print(f"  seed={seed}: val={r['val_f1']:.4f} test={r['test_f1']:.4f} ep={r['best_epoch']}")
+    results = []
+    for seed in seeds:
+        ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+        # run_id：时间戳_scbm_s种子（扁平化，不再建 seed_* 子目录）
+        parent = config.experiment_path / f"{ts}_scbm_s{seed}"
+        print(f">>> seed={seed} → {parent.name}")
 
-    print(f"\n{'='*50}")
-    print(f"  {'Seed':<8}{'Val':<10}{'Test':<10}{'NT':<10}{'TX':<10}")
-    print(f"  {'-'*46}")
-    print(f"  {seed:<8}{r['val_f1']:<10.4f}{r['test_f1']:<10.4f}"
-          f"{r['nt_recall']:<10.4f}{r['tx_recall']:<10.4f}")
+        r = train_one_seed(tr_X, tr_y, te_X, te_y, concept_types,
+                           config, n_concepts, 0, 1,  # ns=0, nc=1
+                           config.label_smoothing, use_ema, config.ema_decay, seed)
+        save_seed_result(parent, r, seed, config, args, n_concepts, n_feat)
+        print(f"  seed={seed}: val={r['val_f1']:.4f} test={r['test_f1']:.4f} ep={r['best_epoch']}")
+        results.append(r)
+
+    print(f"\n{'='*56}")
+    print(f"  {'Seed':<8}{'Val':<10}{'F1w':<10}{'Acc':<10}{'MacroF1':<10}")
+    print(f"  {'-'*52}")
+    for seed, r in zip(seeds, results):
+        print(f"  {seed:<8}{r['val_f1']:<10.4f}{r['test_f1']:<10.4f}"
+              f"{r['test_acc']:<10.4f}{r['macro_f1']:<10.4f}")
 
 
 if __name__ == "__main__":
