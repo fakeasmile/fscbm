@@ -1,0 +1,28 @@
+{
+  "method": "concept_informativeness",
+  "predictability": {
+    "concept_features": {
+      "auc": 0.8782427523475393,
+      "f1_weighted": 0.8010457298666223
+    },
+    "label_permutation": {
+      "auc": 0.46042630569581194,
+      "f1_weighted": 0.4382344591339623
+    },
+    "random_features": {
+      "auc": 0.5041448688263614,
+      "f1_weighted": 0.48722708710387563
+    }
+  },
+  "interpretability": {
+    "concept_cumulative_share": {
+      "top_5": 0.065658800303936,
+      "top_10": 0.12363307923078537,
+      "top_20": 0.23206213116645813,
+      "top_50": 0.5019510984420776
+    },
+    "NEC_effective_concepts": 120.4654541015625,
+    "n_nonzero_concepts": 132,
+    "total_concepts": 132
+  }
+}
