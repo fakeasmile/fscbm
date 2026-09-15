@@ -1,0 +1,67 @@
+{
+  "method": "concept_faithfulness_comprehensiveness_sufficiency",
+  "reference": "DeYoung et al., 2020 (ERASER): comprehensiveness & sufficiency",
+  "ranking": "gradient x input attribution at gated bottleneck x = x * sigmoid(gate(x))",
+  "intervention": "zero-out concepts on gated bottleneck x (CBM bottleneck intervention)",
+  "significance": "paired permutation test (top rank vs random rank), one-sided",
+  "dataset": "TOXICN",
+  "model": "glm-4-9b-chat",
+  "seeds": [
+    4468,
+    729,
+    1196,
+    5114,
+    1136
+  ],
+  "n_test": 2411,
+  "n_concepts": 132,
+  "concept_counts": [
+    5,
+    10,
+    20,
+    50
+  ],
+  "random_trials": 20,
+  "n_perm": 2000,
+  "metric": "Comprehensiveness: drop in p_toxic; Sufficiency: gap in p_toxic",
+  "comprehensiveness": {
+    "topk": {
+      "5": 0.008254144340753555,
+      "10": 0.012329941615462303,
+      "20": 0.019499551504850388,
+      "50": 0.04540785402059555
+    },
+    "random": {
+      "5": 0.0009092410327866673,
+      "10": 0.0020034327171742916,
+      "20": 0.0039376672357320786,
+      "50": 0.012411393225193024
+    },
+    "pvalue": {
+      "5": 0.0004997501249375312,
+      "10": 0.0004997501249375312,
+      "20": 0.0004997501249375312,
+      "50": 0.0004997501249375312
+    }
+  },
+  "sufficiency": {
+    "topk": {
+      "5": 0.04530346393585205,
+      "10": 0.031750861555337906,
+      "20": 0.018799476325511932,
+      "50": 0.004471336957067251
+    },
+    "random": {
+      "5": 0.08325975388288498,
+      "10": 0.07224768400192261,
+      "20": 0.055748943239450455,
+      "50": 0.02721756510436535
+    },
+    "pvalue": {
+      "5": 0.0004997501249375312,
+      "10": 0.0004997501249375312,
+      "20": 0.0004997501249375312,
+      "50": 0.0004997501249375312
+    }
+  }
+}
